@@ -158,6 +158,55 @@ def demo_source_video() -> FileResponse:
     return FileResponse(path, media_type="video/mp4", filename="WhatsApp Video 2026-11-02 at 2.24.27 PM.mp4")
 
 
+@app.get("/api/demo/synthetic-replay")
+def synthetic_validation_replay() -> dict[str, object]:
+    """Return the latest cached, no-network replay of the sanitized simulator run."""
+    candidates = sorted(
+        Path("data/perception-validation").glob("*/demo-evaluation.json"),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    for evaluation_path in candidates:
+        try:
+            evaluation = json.loads(evaluation_path.read_text(encoding="utf-8"))
+            state_path = evaluation_path.parent / "session.json"
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        geometry = state.get("geometry_quality") or {}
+        tracking = state.get("sanitized_sam_tracking") or {}
+        sampling = state.get("sampling") or {}
+        source = sampling.get("source") or {}
+        return {
+            **evaluation,
+            "video_url": "/api/demo/source-video",
+            "sampling": {
+                "source_width": source.get("width"),
+                "source_height": source.get("height"),
+                "source_fps": source.get("fps"),
+                "source_frame_count": source.get("frame_count"),
+                "start_s": sampling.get("source_start_s"),
+                "end_s": sampling.get("source_end_s"),
+                "frame_stride": sampling.get("frame_stride"),
+            },
+            "tracking": {
+                "method": tracking.get("method"),
+                "status": tracking.get("status"),
+                "object_id": tracking.get("object_id"),
+                "frames_tracked": tracking.get("frames_tracked", 0),
+                "frames_with_masks": tracking.get("frames_with_masks", 0),
+                "confidence": tracking.get("confidence", 0.0),
+                "input_sanitization": tracking.get("input_sanitization"),
+                "sanitized_frame_count": tracking.get("sanitized_frame_count", 0),
+                "tracks": tracking.get("tracks", []),
+            },
+            "annotation": state.get("annotation"),
+            "geometry_quality": geometry,
+            "comparison": state.get("csv_comparison"),
+        }
+    raise HTTPException(status_code=404, detail="No cached synthetic validation replay is available.")
+
+
 @app.get("/api/demo/replays/{item_id}", response_model=DemoReplayResponse)
 def replay_saved_investigation(item_id: str) -> DemoReplayResponse:
     """Recompute inference locally from one saved observation without API calls."""

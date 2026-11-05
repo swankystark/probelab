@@ -219,7 +219,12 @@ async def upload_artifact(
         update={
             "uploads": [*state.uploads, response],
             "session": state.session.model_copy(
-                update={"status": "uploaded", "updated_at": datetime.now(UTC)}
+                update={
+                    "status": (
+                        "uploaded" if state.session.status == "created" else state.session.status
+                    ),
+                    "updated_at": datetime.now(UTC),
+                }
             ),
         }
     )

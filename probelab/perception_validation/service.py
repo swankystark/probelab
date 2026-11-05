@@ -91,7 +91,9 @@ def execute_handoff(
             muse=unavailable,
         )
     try:
-        fit = fit_posterior(np.asarray(inputs.timestamps), np.asarray(inputs.angles))
+        source_times = np.asarray(inputs.timestamps)
+        relative_times = source_times - source_times[0]
+        fit = fit_posterior(relative_times, np.asarray(inputs.angles))
         angle, duration, eig, rationale = choose_experiment(
             fit.posterior, list(request.completed_angles)
         )
