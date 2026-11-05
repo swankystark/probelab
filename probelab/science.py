@@ -26,6 +26,9 @@ class FitResult:
     residual_rms: float
     adequacy: str
     posterior: Posterior
+    initial_velocity_rad_s: float = 0.0
+    initial_velocity_interval_rad_s: tuple[float, float] | None = None
+    initial_velocity_prior_bounds_rad_s: tuple[float, float] | None = None
 
 
 def simulate(
@@ -49,36 +52,134 @@ def simulate(
     return times, np.degrees(solution.y[0])
 
 
-def fit_posterior(times: np.ndarray, angles_deg: np.ndarray) -> FitResult:
-    """Evaluate a bounded grid posterior against measured angular data."""
+def fit_posterior(
+    times: np.ndarray,
+    angles_deg: np.ndarray,
+    *,
+    infer_initial_velocity: bool = False,
+) -> FitResult:
+    """Evaluate the production grid posterior against measured angular data.
+
+    When requested for a window that begins mid-motion, marginalize over an
+    initial angular-velocity nuisance state. Its uniform prior is bounded by
+    1.25 times the largest observed sample-to-sample angular rate.
+    """
     observed = np.asarray(angles_deg, dtype=float)
     sample_times = np.asarray(times, dtype=float)
     if observed.size < 12 or sample_times.size != observed.size or not np.all(np.isfinite(observed)) or not np.all(np.isfinite(sample_times)) or not np.all(np.diff(sample_times) > 0):
         raise ValueError("Observation timestamps and angles must be finite, increasing, and aligned.")
-    lengths = np.linspace(0.25, 1.8, 32)
-    damping = np.linspace(0.005, 0.35, 28)
-    length_grid, damping_grid = np.meshgrid(lengths, damping, indexing="ij")
-    scores = np.empty((len(lengths), len(damping)))
     scale = max(float(np.std(observed) * 0.08), 0.35)
-    predicted = _grid_trajectory(float(observed[0]), float(sample_times[-1]), length_grid, damping_grid, len(observed))
-    scores[:, :] = -0.5 * np.mean((observed[None, None, :] - predicted) ** 2, axis=2) / (scale**2)
-    scores -= float(np.max(scores))
-    weights = np.exp(scores)
-    weights /= float(np.sum(weights))
-    l_mesh, b_mesh = length_grid, damping_grid
-    best_length = _weighted_quantile(l_mesh, weights, 0.5)
-    best_damping = _weighted_quantile(b_mesh, weights, 0.5)
-    _, predicted = simulate(float(observed[0]), float(sample_times[-1]), best_length, best_damping, len(observed))
+    initial_velocity_rad_s = 0.0
+    initial_velocity_interval_rad_s = None
+    initial_velocity_prior_bounds_rad_s = None
+
+    if infer_initial_velocity:
+        rates = np.diff(np.radians(observed)) / np.diff(sample_times)
+        velocity_bound = max(float(np.max(np.abs(rates))) * 1.25, 0.25)
+        velocities = np.linspace(-velocity_bound, velocity_bound, 61)
+        initial_velocity_prior_bounds_rad_s = (-velocity_bound, velocity_bound)
+        lengths = np.linspace(0.25, 1.8, 96)
+        damping = np.linspace(0.005, 0.35, 72)
+        score_cube = np.empty((len(lengths), len(damping), len(velocities)))
+        for start in range(0, len(velocities), 4):
+            stop = min(start + 4, len(velocities))
+            length_grid, damping_grid, velocity_grid = np.meshgrid(
+                lengths, damping, velocities[start:stop], indexing="ij"
+            )
+            predicted = _grid_trajectory(
+                float(observed[0]),
+                float(sample_times[-1]),
+                length_grid,
+                damping_grid,
+                len(observed),
+                initial_velocity=velocity_grid,
+            )
+            score_cube[:, :, start:stop] = (
+                -0.5
+                * np.mean(
+                    (observed[None, None, None, :] - predicted) ** 2,
+                    axis=3,
+                )
+                / (scale**2)
+            )
+        score_cube -= float(np.max(score_cube))
+        joint_weights = np.exp(score_cube)
+        joint_weights /= float(np.sum(joint_weights))
+        weights = np.sum(joint_weights, axis=2)
+        weights /= float(np.sum(weights))
+        length_grid, damping_grid = np.meshgrid(lengths, damping, indexing="ij")
+    else:
+        lengths = np.linspace(0.25, 1.8, 32)
+        damping = np.linspace(0.005, 0.35, 28)
+        length_grid, damping_grid = np.meshgrid(lengths, damping, indexing="ij")
+        predicted = _grid_trajectory(
+            float(observed[0]),
+            float(sample_times[-1]),
+            length_grid,
+            damping_grid,
+            len(observed),
+        )
+        scores = -0.5 * np.mean(
+            (observed[None, None, :] - predicted) ** 2, axis=2
+        ) / (scale**2)
+        scores -= float(np.max(scores))
+        weights = np.exp(scores)
+        weights /= float(np.sum(weights))
+
+    best_length = _weighted_quantile(length_grid, weights, 0.5)
+    best_damping = _weighted_quantile(damping_grid, weights, 0.5)
+    length_interval = _credible(length_grid, weights)
+    damping_interval = _credible(damping_grid, weights)
+
+    if infer_initial_velocity:
+        length_index = int(np.argmin(np.abs(lengths - best_length)))
+        damping_index = int(np.argmin(np.abs(damping - best_damping)))
+        conditional_weights = joint_weights[length_index, damping_index, :]
+        initial_velocity_rad_s = _weighted_quantile(
+            velocities, conditional_weights, 0.5
+        )
+        initial_velocity_interval_rad_s = (
+            _weighted_quantile(velocities, conditional_weights, 0.16),
+            _weighted_quantile(velocities, conditional_weights, 0.84),
+        )
+
+    _, predicted = simulate(
+        float(observed[0]),
+        float(sample_times[-1]),
+        best_length,
+        best_damping,
+        len(observed),
+        initial_velocity=initial_velocity_rad_s,
+    )
     residual = float(np.sqrt(np.mean((observed - predicted) ** 2)))
     adequacy = "good" if residual < 3.0 else "needs more evidence"
-    return FitResult(best_length, best_damping, _credible(l_mesh, weights), _credible(b_mesh, weights), residual, adequacy, Posterior(lengths, damping, weights))
+    return FitResult(
+        best_length,
+        best_damping,
+        length_interval,
+        damping_interval,
+        residual,
+        adequacy,
+        Posterior(lengths, damping, weights),
+        initial_velocity_rad_s,
+        initial_velocity_interval_rad_s,
+        initial_velocity_prior_bounds_rad_s,
+    )
 
 
-def _grid_trajectory(angle_deg: float, duration_s: float, lengths: np.ndarray, damping: np.ndarray, count: int) -> np.ndarray:
+def _grid_trajectory(
+    angle_deg: float,
+    duration_s: float,
+    lengths: np.ndarray,
+    damping: np.ndarray,
+    count: int,
+    *,
+    initial_velocity: np.ndarray | float = 0.0,
+) -> np.ndarray:
     """Integrate every grid member together with a fixed-step RK4 scheme."""
     dt = duration_s / max(count - 1, 1)
     theta = np.full_like(lengths, math.radians(angle_deg), dtype=float)
-    velocity = np.zeros_like(theta)
+    velocity = np.broadcast_to(initial_velocity, theta.shape).copy()
     result = np.empty((*lengths.shape, count), dtype=float)
     result[..., 0] = np.degrees(theta)
     for index in range(1, count):

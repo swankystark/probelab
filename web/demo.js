@@ -22,8 +22,8 @@ const drawPosterior=(posterior)=>{
   if(!posterior?.weights?.length){canvas.insertAdjacentHTML('afterend','<p class="demo-caption">Posterior grid unavailable in this saved run.</p>');return}
   const rows=posterior.weights.length,cols=posterior.weights[0].length,values=posterior.weights.flat(),peak=Math.max(...values);
   canvas.width=cols;canvas.height=rows;const image=ctx.createImageData(cols,rows);
-  for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){const weight=peak>0?posterior.weights[y][x]/peak:0,p=(y*cols+x)*4;image.data[p]=Math.round(30+weight*170);image.data[p+1]=Math.round(42+weight*210);image.data[p+2]=Math.round(34+weight*45);image.data[p+3]=255}
-  ctx.putImageData(image,0,0);canvas.setAttribute('aria-label',`Saved posterior weights over ${posterior.length_grid_m.length} lengths and ${posterior.damping_grid_s_minus_1.length} damping values`);
+  for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){const ratio=peak>0?posterior.weights[y][x]/peak:0,intensity=Math.max(0,(Math.log10(Math.max(ratio,1e-10))+10)/10),p=(y*cols+x)*4;image.data[p]=Math.round(24+intensity*176);image.data[p+1]=Math.round(34+intensity*214);image.data[p+2]=Math.round(29+intensity*52);image.data[p+3]=255}
+  ctx.putImageData(image,0,0);canvas.setAttribute('aria-label',`Log-scaled saved posterior weights: length ${posterior.length_grid_m[0].toFixed(2)} to ${posterior.length_grid_m.at(-1).toFixed(2)} metres; damping ${posterior.damping_grid_s_minus_1[0].toFixed(3)} to ${posterior.damping_grid_s_minus_1.at(-1).toFixed(3)} per second`);
 };
 const drawTrackOverlay=()=>{
   const canvas=demo$('demo-track-overlay'),video=demo$('demo-run-video');if(!replay||!video.videoWidth||!video.videoHeight)return;
@@ -50,11 +50,50 @@ const renderEvidence=(item)=>{
   demo$('demo-length-interval').textContent=`credible interval ${fit.length_interval_m.map((v)=>v.toFixed(2)).join('–')} m`;
   demo$('demo-damping').textContent=`${fit.damping_s_minus_1.toFixed(4)} s⁻¹`;demo$('demo-damping-interval').textContent=`credible interval ${fit.damping_interval_s_minus_1.map((v)=>v.toFixed(4)).join('–')} s⁻¹`;
   demo$('demo-residual').textContent=`${fit.residual_rms_deg.toFixed(2)}°`;
-  demo$('demo-inference-status').textContent='Production Bayesian posterior from saved SAM angles only. The comparison CSV and simulator labels were excluded.';
-  demo$('demo-eig-state').textContent='Action withheld · fit inadequate';demo$('demo-eig-rationale').textContent=`The production fit residual (${fit.residual_rms_deg.toFixed(2)}°) exceeds the 3.00° adequacy gate. Expected Information Gain selection was not run; no angle is fabricated.`;demo$('demo-eig-value').textContent='EIG not run · blocked by model adequacy gate.';
-  demo$('demo-muse-status').textContent='Not invoked';demo$('demo-muse-text').textContent='Muse Spark was not called: quality-gated production handoff is blocked. Playback uses cached evidence only.';
-  demo$('demo-prediction-status').textContent='AWAITING VALIDATION';demo$('demo-validation-metrics').textContent='No second independent observation is available. No prediction was frozen because model adequacy is insufficient.';
-  demo$('demo-report-note').textContent='Pixel tracking and geometry passed. Metric calibration is unavailable; production handoff is blocked. This is synthetic simulator validation, not physical experimental proof.';
+  const velocityInterval=fit.initial_velocity_interval_rad_s;
+  demo$('demo-initial-velocity').textContent=Number.isFinite(fit.initial_velocity_rad_s)?`${fit.initial_velocity_rad_s.toFixed(3)} rad/s${velocityInterval?` · 68% ${velocityInterval.map((v)=>v.toFixed(3)).join('–')}`:''}`:'Not estimated';
+  const velocityBounds=fit.initial_velocity_prior_bounds_rad_s;
+  demo$('demo-inference-status').textContent=velocityBounds?`Production Bayesian posterior from ${tracking.frames_tracked} saved SAM angles; start-rate prior ${velocityBounds[0].toFixed(2)} to ${velocityBounds[1].toFixed(2)} rad/s. Independent CSV excluded.`:'Production Bayesian posterior from saved SAM angles only. Independent CSV excluded.';
+
+  const selector=item.selector?.angle_deg>0&&fit.adequacy==='good'?item.selector:null;
+  if(selector){
+    demo$('demo-eig-state').textContent=`Recommended · ${selector.angle_deg.toFixed(0)}°`;
+    demo$('demo-eig-rationale').textContent=selector.rationale;
+    demo$('demo-eig-value').textContent=`Expected information gain ${selector.eig_nats.toFixed(3)} nats · ${selector.duration_s.toFixed(1)} s`;
+    const scores=selector.scores||[];
+    demo$('demo-eig-scores').textContent=scores.length?`Candidate scores: ${scores.map((score)=>`${score.angle_deg.toFixed(0)}° ${score.eig_nats.toFixed(2)}`).join(' · ')}`:'Candidate score breakdown unavailable.';
+  }else{
+    demo$('demo-eig-state').textContent=`Action withheld · ${fit.adequacy==='good'?'no saved selector result':'fit inadequate'}`;
+    demo$('demo-eig-rationale').textContent=`The production fit residual is ${fit.residual_rms_deg.toFixed(2)}°; the existing adequacy threshold is 3.00°. No unsupported action is shown.`;
+    demo$('demo-eig-value').textContent='EIG recommendation unavailable for this saved run.';
+    demo$('demo-eig-scores').textContent='';
+  }
+
+  const museText=item.muse?.text?.trim()||'';
+  const museCompleted=String(item.muse?.status||'').toLowerCase()==='completed'&&museText.length>0;
+  demo$('demo-muse-status').textContent=museCompleted?`Saved response · ${item.muse.model||'Muse Spark'}`:'Not invoked for this run';
+  demo$('demo-muse-text').textContent=museCompleted?museText:`Numerical interpretation (not a Muse response): ${item.numerical_interpretation||'Muse Spark was not called for this cached run.'}`;
+
+  const prediction=item.frozen_prediction,validation=item.validation||{};
+  const hasPrediction=Array.isArray(prediction?.angles_deg)&&prediction.angles_deg.length>1;
+  const validationAngles=validation.angles_deg||validation.actual_angles_deg||[];
+  if(hasPrediction){
+    const series=[{values:prediction.angles_deg,color:'var(--blue)'}];
+    if(validationAngles.length>1)series.push({values:validationAngles,color:'var(--lime)'});
+    demoChart(demo$('demo-prediction-chart'),series);
+    demo$('demo-prediction-summary').textContent=`Frozen forecast · ${prediction.angle_deg.toFixed(0)}° release · ${prediction.duration_s.toFixed(1)} s · model-generated, not observed.`;
+    demo$('demo-prediction-status').textContent=validationAngles.length>1?'PREDICTION VALIDATED':'FROZEN · AWAITING VALIDATION';
+  }else{
+    demo$('demo-prediction-chart').textContent='No frozen prediction is available.';
+    demo$('demo-prediction-summary').textContent='No frozen prediction is available.';
+    demo$('demo-prediction-status').textContent='AWAITING VALIDATION';
+  }
+  if(validationAngles.length>1){
+    demo$('demo-validation-metrics').textContent=`Observed validation is available · RMSE ${Number(validation.rmse_deg).toFixed(2)}° · max error ${Number(validation.max_error_deg).toFixed(2)}°.`;
+  }else{
+    demo$('demo-validation-metrics').textContent=validation.message||'No second independent observation is available; the frozen curve remains an unvalidated prediction.';
+  }
+  demo$('demo-report-note').textContent='Pixel tracking and geometry passed. Metric calibration is unavailable, so production handoff remains blocked. Synthetic simulator validation only; no physical validation claim.';
 };
 const stopPlayback=()=>{if(ticker){clearInterval(ticker);ticker=null}demo$('demo-run-video').pause()};
 const showChooser=()=>{stopPlayback();document.body.classList.add('demo-mode');demo$('launch-home').classList.remove('hidden');demo$('demo-home').classList.add('hidden');demo$('demo-dashboard').classList.add('hidden');demo$('setup-view').classList.add('hidden');demo$('workspace-view').classList.add('hidden');demo$('mode-toggle').textContent='Choose workflow';demo$('workflow-context').textContent='CHOOSE A WORKFLOW'};
@@ -85,7 +124,7 @@ demoApi('/api/demo/synthetic-replay').then((item)=>{renderEvidence(item);demo$('
 const demoStage=(name)=>{const rail=demo$('workflow-rail');if(!rail)return;const order=['observation','inference','muse','prediction','validation'],current=order.indexOf(name);rail.querySelectorAll('[data-stage]').forEach((item,index)=>{item.classList.toggle('complete',index<current);item.classList.toggle('active',index===current)})};
 const demoChart=(target,series)=>{const valid=series.filter((item)=>item.values?.length>1);if(!valid.length){target.textContent='Trajectory unavailable';return}const all=valid.flatMap((item)=>item.values),lo=Math.min(...all),hi=Math.max(...all),span=Math.max(hi-lo,1),paths=valid.map((item)=>`<polyline points="${item.values.map((value,index)=>`${index/(item.values.length-1)*100},${90-(value-lo)/span*78}`).join(' ')}" fill="none" stroke="${item.color}" stroke-width="1.5" vector-effect="non-scaling-stroke"/>`).join('');target.innerHTML=`<svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${paths}</svg>`};
 const originalSetWorkspace=window.setWorkspace;
-window.setWorkspace=(item)=>{liveId=item.id;liveStarted=true;stopPlayback();document.body.classList.remove('demo-mode');demo$('launch-home').classList.add('hidden');demo$('demo-home').classList.add('hidden');demo$('demo-dashboard').classList.add('hidden');demo$('workflow-context').textContent='LIVE EXPERIMENT · ACTIVE INVESTIGATION';originalSetWorkspace(item);demo$('setup-view').classList.add('hidden');demoStage(item.observations?.length?'inference':'observation');demo$('retry-muse').classList.toggle('hidden',item.agent_status==='Completed'||item.agent_status==='Pending');const prediction=item.prediction;if(prediction){demoChart(demo$('prediction-chart'),[{values:prediction.angles_deg,color:'var(--status-info)'}]);demo$('prediction-state').textContent='Frozen · awaiting validation';demo$('validation-angle').value=prediction.angle_deg;demo$('validation-duration').value=prediction.duration_s}else{demo$('prediction-state').textContent='Awaiting a valid fit';demo$('prediction-chart').textContent='No supported prediction yet.'}};
+window.setWorkspace=(item)=>{liveId=item.id;liveStarted=true;stopPlayback();document.body.classList.remove('demo-mode');demo$('launch-home').classList.add('hidden');demo$('demo-home').classList.add('hidden');demo$('demo-dashboard').classList.add('hidden');demo$('workflow-context').textContent='LIVE EXPERIMENT · ACTIVE INVESTIGATION';originalSetWorkspace(item);demo$('setup-view').classList.add('hidden');demoStage(item.observations?.length?'inference':'observation');demo$('retry-muse').classList.toggle('hidden',item.agent_status==='Completed'||item.agent_status==='Pending');const prediction=item.prediction;if(prediction){demoChart(demo$('prediction-chart'),[{values:prediction.angles_deg,color:'var(--blue)'}]);demo$('prediction-state').textContent='Frozen · awaiting validation';demo$('validation-angle').value=prediction.angle_deg;demo$('validation-duration').value=prediction.duration_s}else{demo$('prediction-state').textContent='Awaiting a valid fit';demo$('prediction-chart').textContent='No supported prediction yet.'}};
 const demoApiPost=async(path,payload)=>{const response=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}),body=await response.json();if(!response.ok)throw new Error(body.detail||`Request failed (${response.status})`);return body};
 window.finishDiscovery=async(item)=>{demoStage('inference');if(item.status!=='experiment recommended'||!(item.recommendation.angle_deg>0)){demo$('prediction-state').textContent='No prediction: fit inadequate';demoStage('validation');return}demoStage('muse');if(item.agent_status!=='Completed')demo$('reasoning').textContent=`Agent reasoning unavailable (${item.agent_status}). Numerical results are preserved.`;demoStage('prediction');try{const response=await demoApiPost(`/api/investigations/${item.id}/predict`,{angle_deg:item.recommendation.angle_deg,duration_s:item.recommendation.duration_s});window.setWorkspace(response);demo$('prediction-state').textContent='Frozen · awaiting validation';demo$('prediction-validation-state').textContent='Prediction frozen before the next observation. Upload the resulting physical experiment in Prediction and validation.';demoStage('validation')}catch(error){demo$('prediction-state').textContent=`Prediction failed · ${error.message}`}};
 const originalSubmitObservation=window.submitObservation;
