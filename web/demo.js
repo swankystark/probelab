@@ -11,7 +11,7 @@ const stageSpecs=[
 let replay=null, startedAt=0, elapsedBeforePause=0, ticker=null, paused=false, liveStarted=false, liveId=null, activeStage=-1;
 const fmtClock=(seconds)=>`${Math.floor(seconds/60)}:${String(Math.floor(seconds%60)).padStart(2,'0')}`;
 const demoApi=async(path)=>{const response=await fetch(path);const body=await response.json();if(!response.ok)throw new Error(body.detail||`Request failed (${response.status})`);return body};
-const drawTrajectory=(target,records)=>{
+const drawDemoTrajectory=(target,records)=>{
   if(!records?.length){target.textContent='No saved angular measurements.';return}
   const values=records.map((record)=>record.angle_deg), min=Math.min(...values), max=Math.max(...values), span=Math.max(max-min,1);
   const points=records.map((record,index)=>`${(index/Math.max(records.length-1,1))*100},${92-((record.angle_deg-min)/span)*80}`).join(' ');
@@ -45,7 +45,7 @@ const renderEvidence=(item)=>{
   demo$('demo-radius').textContent=`${geometry.radius.median_px.toFixed(1)} px · CV ${(geometry.radius.cv*100).toFixed(2)}%`;
   demo$('demo-coverage').textContent=`${(geometry.coverage_fraction*100).toFixed(0)}% · pixel geometry PASS`;
   demo$('demo-comparison').textContent=comparison?`Independent CSV comparison · RMSE ${comparison.angular_rmse_deg.toFixed(2)}° · max ${comparison.angular_max_error_deg.toFixed(2)}° · offset +${comparison.estimated_time_offset_s.toFixed(3)} s · overlap ${comparison.overlap_frame_count} frames / ${comparison.overlap_duration_s.toFixed(3)} s`:'No independent CSV comparison is saved.';
-  drawTrajectory(demo$('demo-observed-chart'),geometry.pixel_geometry);drawPosterior(item.posterior);
+  drawDemoTrajectory(demo$('demo-observed-chart'),geometry.pixel_geometry);drawPosterior(item.posterior);
   demo$('demo-adequacy').textContent=fit.adequacy.toUpperCase();demo$('demo-length').textContent=`${fit.length_m.toFixed(2)} m`;
   demo$('demo-length-interval').textContent=`credible interval ${fit.length_interval_m.map((v)=>v.toFixed(2)).join('–')} m`;
   demo$('demo-damping').textContent=`${fit.damping_s_minus_1.toFixed(4)} s⁻¹`;demo$('demo-damping-interval').textContent=`credible interval ${fit.damping_interval_s_minus_1.map((v)=>v.toFixed(4)).join('–')} s⁻¹`;
