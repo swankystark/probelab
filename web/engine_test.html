@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="ProbeLab engine validation workspace.">
+  <title>ProbeLab · Engine test</title>
+  <link rel="stylesheet" href="/static/engine_test.css">
+</head>
+<body class="engine-test-page">
+  <header class="et-topbar">
+    <a class="et-brand" href="/"><span class="et-brand-mark">P</span><span>ProbeLab</span></a>
+    <div class="et-top-meta"><span class="et-status-dot"></span><span>ENGINE TEST</span><span class="et-mono">ISOLATED WORKSPACE</span></div>
+  </header>
+
+  <main class="et-shell">
+    <section class="et-hero">
+      <div>
+        <p class="et-eyebrow">ENGINE VALIDATION / REFERENCE TRACK</p>
+        <h1>Check what the engine<br><em>actually learned.</em></h1>
+        <p class="et-lede">Run focused checks against the scientific engine: compare solvers, recover hidden parameters, freeze predictions, and choose the next useful experiment.</p>
+      </div>
+      <aside class="et-hero-note"><span></span><p>Observed values, hidden truth, and selected actions stay visibly separate.</p></aside>
+    </section>
+
+    <section class="et-workspace" aria-label="Engine test workspace">
+      <nav class="et-tabs" role="tablist" aria-label="Engine test workflows">
+        <button class="et-tab is-active" role="tab" aria-selected="true" aria-controls="panel-solver" data-tab="solver">Solver validation<span>01</span></button>
+        <button class="et-tab" role="tab" aria-selected="false" aria-controls="panel-recovery" data-tab="recovery">Parameter recovery<span>02</span></button>
+        <button class="et-tab" role="tab" aria-selected="false" aria-controls="panel-prediction" data-tab="prediction">Prediction &amp; generalization<span>03</span></button>
+        <button class="et-tab" role="tab" aria-selected="false" aria-controls="panel-selection" data-tab="selection">Experiment selection<span>04</span></button>
+      </nav>
+
+      <section class="et-tab-panel is-active" id="panel-solver" role="tabpanel" data-panel="solver">
+        <div class="et-panel-intro"><div><p class="et-kicker"><span>01</span> SOLVER VALIDATION</p><h2>Does the integrator follow the reference?</h2><p>Compare a production trajectory with the independent reference solver at the same physical settings.</p></div><span class="et-pill et-pill-blue">REFERENCE / DOP853</span></div>
+        <form class="et-form" id="solver-form" data-operation="solver-validation">
+          <div class="et-field-grid et-field-grid-4">
+            <label>Initial angle <span>degrees</span><input name="angle_deg" type="number" value="20" min="0" max="180" step="0.1" required></label>
+            <label>Duration <span>seconds</span><input name="duration_s" type="number" value="8" min="0.01" max="300" step="0.01" required></label>
+            <label>Length <span>metres</span><input name="length_m" type="number" value="1" min="0.001" step="0.001" required></label>
+            <label>Damping <span>s⁻¹</span><input name="damping_s_inv" type="number" value="0.1" min="0" max="10" step="0.001" required></label>
+            <label>Initial velocity <span>rad/s</span><input name="initial_velocity_rad_s" type="number" value="0" min="-100" max="100" step="0.1" required></label>
+            <label>Gravity <span>m/s²</span><input name="gravity_m_s2" type="number" value="9.80665" min="0.001" max="100" step="0.00001" required></label>
+            <label>Samples <span>points</span><input name="samples" type="number" value="240" min="2" max="10000" step="1" required></label>
+          </div>
+          <div class="et-form-actions"><button class="et-primary" type="submit">Run solver check <span>↗</span></button><button class="et-secondary" type="reset">Restore defaults</button></div>
+          <div class="et-feedback" data-feedback="solver" role="status" aria-live="polite"></div>
+        </form>
+        <div class="et-result-grid"><div class="et-card"><div class="et-card-head"><div><span class="et-pill">TRAJECTORY</span><h3>Production vs reference</h3></div><span class="et-mono" data-result-label="solver">Waiting for a run</span></div><div class="et-chart-wrap"><canvas id="solver-chart" width="900" height="320" aria-label="Solver trajectory comparison"></canvas><div class="et-empty" data-empty="solver">Run the check to see both trajectories.</div></div></div><div class="et-card"><div class="et-card-head"><div><span class="et-pill et-pill-orange">COMPARISON</span><h3>Error budget</h3></div></div><div class="et-metrics" data-metrics="solver"><div class="et-empty">No comparison yet.</div></div></div></div>
+      </section>
+
+      <section class="et-tab-panel" id="panel-recovery" role="tabpanel" data-panel="recovery" hidden>
+        <div class="et-panel-intro"><div><p class="et-kicker"><span>02</span> PARAMETER RECOVERY</p><h2>Can observations reveal the hidden system?</h2><p>Generate or paste measured samples, then compare the recovered length and damping with the known reference.</p></div><span class="et-pill et-pill-purple">OBSERVATIONS ONLY</span></div>
+        <form class="et-form" id="recovery-form" data-operation="parameter-recovery">
+          <fieldset class="et-generator-fieldset"><legend><span>Experiment 01</span> Synthetic observation generator</legend><div class="et-field-grid et-field-grid-4"><label>Length <span>metres</span><input name="length_m" type="number" value="0.8" min="0.001" step="0.001" required></label><label>Damping <span>s⁻¹</span><input name="damping_s_inv" type="number" value="0.08" min="0" max="10" step="0.001" required></label><label>Gravity <span>m/s²</span><input name="gravity_m_s2" type="number" value="9.81" min="0.001" max="100" step="0.00001" required></label><label>Initial angle <span>degrees</span><input name="angle_deg" type="number" value="35" min="0" max="180" step="0.1" required></label><label>Initial velocity <span>rad/s</span><input name="initial_velocity_rad_s" type="number" value="0" min="-100" max="100" step="0.01" required></label><label>Duration <span>seconds</span><input name="duration_s" type="number" value="15" min="0.01" max="300" step="0.01" required></label><label>Sampling rate <span>Hz</span><input name="sampling_hz" type="number" value="30" min="1" step="1" required></label><label>Noise sigma <span>degrees σ</span><input name="noise_sigma_deg" type="number" value="0" min="0" max="180" step="0.001" required></label><label>Seed <span>reproducibility</span><input name="seed" type="number" value="0" min="0" step="1" required></label></div><div class="et-form-actions"><button class="et-secondary" type="button" id="recovery-generate">Generate observations</button><span class="et-generator-status" data-generator-status>Ready to generate.</span></div></fieldset><div class="et-generator-meta" data-generator-meta aria-live="polite"><div><span>Observations</span><strong data-generator-count>—</strong></div><div><span>Initial angle</span><strong data-generator-angle>—</strong></div><div><span>Duration</span><strong data-generator-duration>—</strong></div><div><span>Sampling interval</span><strong data-generator-interval>—</strong></div></div>
+          <label class="et-wide-label">Observed samples <span>CSV with exactly <code>time_s,angle_deg</code> · paste at least 12 rows</span><textarea name="csv_text" rows="7" placeholder="Generate observations above, or paste external samples here."></textarea></label>
+          <div class="et-form-actions"><button class="et-primary" type="submit">Recover parameters <span>↗</span></button></div><div class="et-feedback" data-feedback="recovery" role="status" aria-live="polite"></div>
+        </form>
+        <div class="et-result-grid"><div class="et-card"><div class="et-card-head"><div><span class="et-pill">RECOVERY MAP</span><h3>Observed trajectory</h3></div><span class="et-mono" data-result-label="recovery">Waiting for samples</span></div><div class="et-chart-wrap"><canvas id="recovery-chart" width="900" height="320" aria-label="Observed angle trajectory"></canvas><div class="et-empty" data-empty="recovery">Paste samples or load the example dataset.</div></div></div><div class="et-card"><div class="et-card-head"><div><span class="et-pill et-pill-purple">ESTIMATES</span><h3>Recovered state</h3></div></div><div class="et-table-wrap" data-table="recovery"><div class="et-empty">No estimates yet.</div></div></div></div>
+      </section>
+
+      <section class="et-tab-panel" id="panel-prediction" role="tabpanel" data-panel="prediction" hidden>
+        <div class="et-panel-intro"><div><p class="et-kicker"><span>03</span> PREDICTION / GENERALIZATION</p><h2>Freeze first. Test on an unseen angle.</h2><p>Use a frozen posterior-derived model to predict a new trajectory. No test observations are sent with this request.</p></div><span class="et-pill et-pill-orange">FROZEN POSTERIOR</span></div>
+        <form class="et-form" id="prediction-form" data-operation="prediction">
+          <div class="et-field-grid et-field-grid-4"><label>Test angle <span>degrees</span><input name="angle_deg" type="number" value="48" min="0" max="180" step="0.1" required></label><label>Duration <span>seconds</span><input name="duration_s" type="number" value="8" min="0.01" max="300" step="0.01" required></label><label>Frozen length <span>metres</span><input name="length_m" type="number" value="0.8" min="0.001" step="0.001" required></label><label>Frozen damping <span>s⁻¹</span><input name="damping_s_inv" type="number" value="0.06" min="0" max="10" step="0.001" required></label></div>
+          <label class="et-wide-label">Model version <span>the posterior snapshot to keep traceable</span><input name="model_version" value="posterior-manual-v1" required></label>
+          <div class="et-form-actions"><button class="et-primary" type="submit">Freeze prediction <span>↗</span></button></div><div class="et-feedback" data-feedback="prediction" role="status" aria-live="polite"></div>
+        </form>
+        <div class="et-result-grid"><div class="et-card"><div class="et-card-head"><div><span class="et-pill et-pill-orange">PREDICTED PATH</span><h3>Generalization view</h3></div><span class="et-mono" data-result-label="prediction">No frozen run</span></div><div class="et-chart-wrap"><canvas id="prediction-chart" width="900" height="320" aria-label="Frozen prediction trajectory"></canvas><div class="et-empty" data-empty="prediction">A frozen trajectory will appear here.</div></div></div><div class="et-card"><div class="et-card-head"><div><span class="et-pill">TRACEABILITY</span><h3>Prediction record</h3></div></div><div class="et-detail-list" data-details="prediction"><div class="et-empty">No prediction record yet.</div></div></div></div>
+      </section>
+
+      <section class="et-tab-panel" id="panel-selection" role="tabpanel" data-panel="selection" hidden>
+        <div class="et-panel-intro"><div><p class="et-kicker"><span>04</span> EXPERIMENT SELECTION</p><h2>Which angle teaches the most?</h2><p>Score the supplied candidate angles against the current posterior. Higher EIG means more expected information gain.</p></div><span class="et-pill et-pill-lime">14 CANDIDATES</span></div>
+        <form class="et-form" id="selection-form" data-operation="experiment-selection">
+          <div class="et-field-grid et-field-grid-3"><label>Noise level <span>degrees σ</span><input name="noise_sigma_deg" type="number" value="1" min="0.001" max="180" step="0.001" required></label><label>Completed angles <span>comma-separated degrees</span><input name="completed_angles_deg" placeholder="20, 35"></label><label>Posterior version <span>optional label</span><input name="posterior_version" value="posterior-manual-v1"></label></div>
+          <fieldset class="et-candidate-field"><legend>Candidate angles <span>choose from the supplied set</span></legend><div class="et-candidate-grid" id="candidate-grid"></div></fieldset>
+          <div class="et-form-actions"><button class="et-primary" type="submit">Score experiments <span>↗</span></button></div><div class="et-feedback" data-feedback="selection" role="status" aria-live="polite"></div>
+        </form>
+        <div class="et-result-grid"><div class="et-card"><div class="et-card-head"><div><span class="et-pill et-pill-lime">EIG SCORES</span><h3>Information gain by angle</h3></div><span class="et-mono" data-result-label="selection">Waiting for scores</span></div><div class="et-chart-wrap"><canvas id="selection-chart" width="900" height="320" aria-label="Expected information gain by candidate angle"></canvas><div class="et-empty" data-empty="selection">Score the candidates to compare them.</div></div></div><div class="et-card"><div class="et-card-head"><div><span class="et-pill et-pill-orange">SELECTED ACTION</span><h3>Next experiment</h3></div></div><div class="et-selected-action" data-selected-action><div class="et-empty">No action selected yet.</div></div><div class="et-table-wrap" data-table="selection"><div class="et-empty">The full score table will appear here.</div></div></div></div>
+      </section>
+    </section>
+
+    <section class="et-history-section"><div class="et-history-head"><div><p class="et-kicker"><span>LEDGER</span> RUN HISTORY</p><h2>Traceable results</h2></div><div class="et-history-actions"><button class="et-secondary" id="refresh-history" type="button">Refresh history</button><button class="et-secondary" id="export-history" type="button">Export JSON</button></div></div><div class="et-card et-history-card"><div class="et-history-state" id="history-state">History is ready when the first engine check completes.</div><div class="et-table-wrap"><table class="et-history-table"><thead><tr><th>Run</th><th>Workflow</th><th>Status</th><th>Selected action / score</th><th>Created</th></tr></thead><tbody id="history-body"></tbody></table></div></div></section>
+  </main>
+  <footer class="et-footer"><span>PROBELAB / ENGINE TEST</span><span>REFERENCE SOLVER · POSTERIOR RECOVERY · INFORMATION GAIN</span></footer>
+  <script src="/static/engine_test.js" defer></script>
+</body>
+</html>

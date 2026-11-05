@@ -1,0 +1,26 @@
+.env
+data/perception-validation/
+data/sam-video-test-*
+data/*-pending.*
+data/engine-test/
+data/**/*.tmp
+data/**/.session-*.json.tmp
+.qa-temp/
+.debug-journal.md
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+
+# Local credentials, environments, and all runtime evidence/media
+.env.*
+!.env.example
+.venv/
+data/
+*.log
+
+# Editor and generated work files
+.omo/
+.vscode/
+.idea/
+dist/
+build/

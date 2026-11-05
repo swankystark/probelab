@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ProbeLab · SAM test</title>
+  <style>
+    :root{color-scheme:dark;--bg:#101310;--panel:#171b17;--elevated:#202720;--text:#f0f1e8;--muted:#a8afa5;--border:#303830;--lime:#c8ff5a;--blue:#8fb6ff;--red:#ff8d79}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 85% 5%,#222b1d 0,transparent 28rem),var(--bg);color:var(--text);font:15px/1.5 ui-sans-serif,system-ui,sans-serif}.shell{max-width:1100px;margin:0 auto;padding:48px 24px 80px}.eyebrow{color:var(--lime);font:700 11px ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase}.top{display:flex;justify-content:space-between;gap:24px;align-items:start;margin-bottom:30px}.top h1{font-size:clamp(32px,5vw,56px);line-height:1;margin:12px 0}.top p{color:var(--muted);max-width:700px}.panel{background:linear-gradient(145deg,var(--panel),#141814);border:1px solid var(--border);border-radius:16px;padding:22px}.controls{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}.button{border:1px solid var(--border);background:var(--elevated);color:var(--text);border-radius:9px;padding:10px 14px;font-weight:700;cursor:pointer}.button.active,.button.primary{background:var(--lime);border-color:var(--lime);color:#101310}.file{display:inline-flex;align-items:center;gap:10px}.file input{width:0;height:0;opacity:0;position:absolute}.stage{background:#0b0e0b;border:1px solid var(--border);border-radius:12px;overflow:hidden}.stage canvas{display:block;width:100%;height:auto;cursor:crosshair;touch-action:none}.mono,pre{font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace}.meta{color:var(--muted);white-space:pre-wrap;margin:14px 0}.result{margin-top:18px}.ok{color:var(--lime)}.fail{color:var(--red)}.result pre{max-height:260px;overflow:auto;white-space:pre-wrap;background:#0b0e0b;border:1px solid var(--border);padding:14px;border-radius:9px}.hidden{display:none}
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <div class="top"><div><div class="eyebrow">ProbeLab / isolated model test</div><h1>Test SAM 3.1 on one frame.</h1><p>This page bypasses the physical-system workflow. Upload a representative image, mark object 1 with a box and points, and send exactly one <code>input_image</code> request to SAM 3.1.</p></div><a href="/" class="mono">← Back to ProbeLab</a></div>
+    <section class="panel">
+      <label class="button file primary">Choose representative image<input id="image-input" type="file" accept="image/*"></label>
+      <span id="image-meta" class="mono">No image selected.</span>
+      <div id="test-panel" class="hidden">
+        <div class="controls"><button class="button prompt-tool active" data-mode="box">Draw box</button><button class="button prompt-tool" data-mode="positive">+ Positive</button><button class="button prompt-tool" data-mode="negative">− Negative</button><button class="button" id="clear-btn">Clear</button><button class="button" id="reset-btn">Reset</button><button class="button primary" id="submit-btn">Send single-frame test to SAM</button></div>
+        <div class="stage"><canvas id="canvas" aria-label="SAM single-frame annotation canvas"></canvas></div>
+        <div id="prompt-meta" class="meta"></div>
+        <div id="status" class="meta">Annotation pending.</div>
+      </div>
+    </section>
+    <section id="result" class="panel result hidden"><h2 id="result-title"></h2><div id="result-meta" class="meta"></div><pre id="result-detail"></pre></section>
+  </main>
+  <script src="/static/sam_test.js?v=sam-image-1"></script>
+</body>
+</html>
