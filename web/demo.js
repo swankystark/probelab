@@ -3,10 +3,10 @@ const stageSpecs=[
   {start:0,end:25,title:'Problem introduction',time:'00:00–00:25',focus:null},
   {start:25,end:45,title:'Introducing ProbeLab',time:'00:25–00:45',focus:null},
   {start:45,end:75,title:'Observation',time:'00:45–01:15',focus:'demo-observation'},
-  {start:75,end:105,title:'Bayesian inference',time:'01:15–01:45',focus:'demo-model'},
-  {start:105,end:135,title:'Active experiment selection',time:'01:45–02:15',focus:'demo-action'},
-  {start:135,end:160,title:'Prediction and validation',time:'02:15–02:40',focus:'demo-prediction'},
-  {start:160,end:180,title:'Closing',time:'02:40–03:00',focus:'demo-closing'},
+  {start:75,end:100,title:'Bayesian inference',time:'01:15–01:40',focus:'demo-model'},
+  {start:100,end:130,title:'Active experiment selection',time:'01:40–02:10',focus:'demo-action'},
+  {start:130,end:155,title:'Prediction and validation',time:'02:10–02:35',focus:'demo-prediction'},
+  {start:155,end:180,title:'Closing',time:'02:35–03:00',focus:'demo-closing'},
 ];
 let replay=null, startedAt=0, elapsedBeforePause=0, ticker=null, paused=false, liveStarted=false, liveId=null, activeStage=-1;
 const fmtClock=(seconds)=>`${Math.floor(seconds/60)}:${String(Math.floor(seconds%60)).padStart(2,'0')}`;
@@ -69,10 +69,25 @@ const renderEvidence=(item)=>{
     demo$('demo-eig-scores').textContent='';
   }
 
-  const museText=item.muse?.text?.trim()||'';
-  const museCompleted=String(item.muse?.status||'').toLowerCase()==='completed'&&museText.length>0;
-  demo$('demo-muse-status').textContent=museCompleted?`Saved response · ${item.muse.model||'Muse Spark'}`:'Not invoked for this run';
-  demo$('demo-muse-text').textContent=museCompleted?museText:`Numerical interpretation (not a Muse response): ${item.numerical_interpretation||'Muse Spark was not called for this cached run.'}`;
+  const museRecord=item.muse||{},museText=museRecord.text?.trim()||'';
+  const museMatchesRun=museRecord.session_id===item.session_id&&/^[a-f0-9]{64}$/.test(museRecord.evidence_fingerprint||'');
+  const museCompleted=String(museRecord.status||'').toLowerCase()==='completed'&&museText.length>0&&museMatchesRun;
+  if(museCompleted){
+    demo$('demo-muse-status').textContent=`Completed · ${museRecord.model} · ${museRecord.response_text_length} chars`;
+    demo$('demo-muse-text').textContent=museText;
+  }else if(museRecord.status==='Failed'||museRecord.status==='Empty response'){
+    demo$('demo-muse-status').textContent=`${museRecord.status} · ${museRecord.model||'Muse Spark'}`;
+    demo$('demo-muse-text').textContent=museRecord.error_detail||'Muse returned an empty response; no interpretation is saved.';
+  }else if(museRecord.status==='Incomplete response'){
+    demo$('demo-muse-status').textContent=`Incomplete · ${museRecord.model||'Muse Spark'} · finish=${museRecord.finish_reason||'unknown'}`;
+    demo$('demo-muse-text').textContent=`Partial API text: “${museText||'no visible text'}”. ${museRecord.error_detail||'The response was truncated and is not a complete interpretation.'}`;
+  }else if(museRecord.status==='Completed'&&!museMatchesRun){
+    demo$('demo-muse-status').textContent='Response provenance mismatch';
+    demo$('demo-muse-text').textContent='The saved response could not be verified against this session and is not displayed as its interpretation.';
+  }else{
+    demo$('demo-muse-status').textContent='Not invoked for this run';
+    demo$('demo-muse-text').textContent=`Numerical interpretation (not a Muse response): ${item.numerical_interpretation||'Muse Spark was not called for this cached run.'}`;
+  }
 
   const prediction=item.frozen_prediction,validation=item.validation||{};
   const hasPrediction=Array.isArray(prediction?.angles_deg)&&prediction.angles_deg.length>1;
@@ -104,22 +119,34 @@ const updateStage=(elapsed)=>{
   document.querySelectorAll('.demo-card').forEach((card)=>{const active=card.id===stage.focus;card.classList.toggle('is-active',active);card.classList.toggle('is-dimmed',Boolean(stage.focus)&&stage.focus!=='demo-closing'&&!active)});
   demo$('demo-progress-fill').style.width=`${Math.min(elapsed/180*100,100)}%`;
   if(elapsed>=45&&elapsed<75)drawTrackOverlay();
-  if(elapsed>=180){stopPlayback();elapsedBeforePause=180;demo$('demo-clock').textContent='3:00 / 3:00';demo$('demo-progress-fill').style.width='100%';return}
+  if(elapsed>=180){stopPlayback();elapsedBeforePause=180;paused=true;demo$('demo-pause').textContent='Play again';demo$('demo-clock').textContent='3:00 / 3:00';demo$('demo-progress-fill').style.width='100%';return}
   demo$('demo-clock').textContent=`${fmtClock(elapsed)} / 3:00`;
 };
 const playbackTick=()=>updateStage(Math.min(elapsedBeforePause+(performance.now()-startedAt)/1000,180));
 const startPlayback=(reset=true)=>{stopPlayback();if(reset){elapsedBeforePause=0;activeStage=-1}paused=false;startedAt=performance.now();demo$('demo-pause').textContent='Pause';ticker=setInterval(playbackTick,100);playbackTick()};
-const togglePause=()=>{if(!ticker)return;if(!paused){elapsedBeforePause=Math.min(elapsedBeforePause+(performance.now()-startedAt)/1000,180);paused=true;clearInterval(ticker);ticker=null;demo$('demo-run-video').pause();demo$('demo-pause').textContent='Resume'}else{startedAt=performance.now();paused=false;ticker=setInterval(playbackTick,100);if(activeStage===2)demo$('demo-run-video').play().catch(()=>{});demo$('demo-pause').textContent='Pause'}};
+const togglePause=()=>{if(paused){if(elapsedBeforePause>=180){startPlayback(true);return}startedAt=performance.now();paused=false;ticker=setInterval(playbackTick,100);if(activeStage===2)demo$('demo-run-video').play().catch(()=>{});demo$('demo-pause').textContent='Pause';return}if(!ticker)return;elapsedBeforePause=Math.min(elapsedBeforePause+(performance.now()-startedAt)/1000,180);paused=true;clearInterval(ticker);ticker=null;demo$('demo-run-video').pause();demo$('demo-pause').textContent='Resume'};
 demo$('launch-live').addEventListener('click',()=>{stopPlayback();document.body.classList.remove('demo-mode');demo$('launch-home').classList.add('hidden');demo$('demo-home').classList.add('hidden');demo$('demo-dashboard').classList.add('hidden');demo$('setup-view').classList.toggle('hidden',liveStarted);demo$('workspace-view').classList.toggle('hidden',!liveStarted);demo$('mode-toggle').textContent='Choose workflow';demo$('workflow-context').textContent='LIVE EXPERIMENT · NEW INVESTIGATION'});
 demo$('launch-cached').addEventListener('click',()=>{document.body.classList.add('demo-mode');demo$('launch-home').classList.add('hidden');demo$('demo-home').classList.remove('hidden');demo$('demo-dashboard').classList.add('hidden');demo$('setup-view').classList.add('hidden');demo$('workspace-view').classList.add('hidden');demo$('mode-toggle').textContent='Choose workflow';demo$('workflow-context').textContent='CACHED DEMO REPLAY'});
 demo$('demo-back-chooser').addEventListener('click',showChooser);
 demo$('demo-play-start').addEventListener('click',()=>{if(!replay)return;document.body.classList.add('demo-mode');demo$('demo-home').classList.add('hidden');demo$('demo-dashboard').classList.remove('hidden');demo$('workflow-context').textContent='CACHED DEMO REPLAY · SAVED EVIDENCE';startPlayback(true)});
 demo$('demo-pause').addEventListener('click',togglePause);demo$('demo-restart').addEventListener('click',()=>startPlayback(true));
+demo$('demo-muse-once').addEventListener('click',async()=>{
+  const button=demo$('demo-muse-once');
+  if(!replay?.session_id||button.disabled)return;
+  button.disabled=true;button.textContent='Requesting Muse once…';
+  demo$('demo-muse-call-status').textContent='Sending only this run’s SAM-derived measurements and numerical outputs to Muse Spark.';
+  try{
+    const result=await demoApiPost(`/api/demo/synthetic-replay/${replay.session_id}/muse`,{});
+    replay.muse=result;renderEvidence(replay);
+    if(result.status==='Completed'&&result.text){button.textContent='Muse response saved';demo$('demo-muse-call-status').textContent=`Actual ${result.model} response saved for this session (${result.response_text_length} characters). Playback will use this saved response without another model call.`}
+    else{button.textContent='Muse attempt recorded';demo$('demo-muse-call-status').textContent=`${result.status}: ${result.error_detail||result.text||'No response text was returned.'} No second request will be made.`}
+  }catch(error){button.textContent='Muse attempt may be recorded';demo$('demo-muse-call-status').textContent=`Request outcome unavailable · ${error.message}. Check the saved session diagnostics before taking further action; playback will not retry.`}
+});
 demo$('mode-toggle').addEventListener('click',showChooser);
 let pendingStageSeek=false;
 demo$('demo-run-video').addEventListener('loadedmetadata',()=>{drawTrackOverlay();if(pendingStageSeek&&replay){const video=demo$('demo-run-video');video.currentTime=replay.sampling.start_s;video.playbackRate=(replay.sampling.end_s-replay.sampling.start_s)/30;pendingStageSeek=false;if(!paused)video.play().catch(()=>{})}});
 demo$('demo-run-video').addEventListener('timeupdate',drawTrackOverlay);window.addEventListener('resize',drawTrackOverlay);
-demoApi('/api/demo/synthetic-replay').then((item)=>{renderEvidence(item);demo$('demo-load-status').textContent='Cached real run ready · no SAM or Muse requests during playback.';demo$('demo-play-start').disabled=false}).catch((error)=>{demo$('demo-load-status').textContent=`Cached run unavailable · ${error.message}`;demo$('demo-play-start').disabled=true});
+demoApi('/api/demo/synthetic-replay').then((item)=>{renderEvidence(item);demo$('demo-load-status').textContent='Cached real run ready · playback makes no SAM or Muse requests.';demo$('demo-play-start').disabled=false;const attempted=Boolean(item.muse?.invocation_metadata?.attempted);demo$('demo-muse-once').disabled=attempted;if(attempted){demo$('demo-muse-once').textContent=item.muse.status==='Completed'?'Muse response saved':'Muse attempt recorded';demo$('demo-muse-call-status').textContent=item.muse.status==='Completed'?`Saved ${item.muse.model} response is linked to this session; playback will not call Muse.`:`${item.muse.status}: ${item.muse.error_detail||item.muse.text||'No response text was returned.'} The one-time attempt is already recorded.`}}).catch((error)=>{demo$('demo-load-status').textContent=`Cached run unavailable · ${error.message}`;demo$('demo-play-start').disabled=true});
 
 const demoStage=(name)=>{const rail=demo$('workflow-rail');if(!rail)return;const order=['observation','inference','muse','prediction','validation'],current=order.indexOf(name);rail.querySelectorAll('[data-stage]').forEach((item,index)=>{item.classList.toggle('complete',index<current);item.classList.toggle('active',index===current)})};
 const demoChart=(target,series)=>{const valid=series.filter((item)=>item.values?.length>1);if(!valid.length){target.textContent='Trajectory unavailable';return}const all=valid.flatMap((item)=>item.values),lo=Math.min(...all),hi=Math.max(...all),span=Math.max(hi-lo,1),paths=valid.map((item)=>`<polyline points="${item.values.map((value,index)=>`${index/(item.values.length-1)*100},${90-(value-lo)/span*78}`).join(' ')}" fill="none" stroke="${item.color}" stroke-width="1.5" vector-effect="non-scaling-stroke"/>`).join('');target.innerHTML=`<svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${paths}</svg>`};

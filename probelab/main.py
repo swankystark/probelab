@@ -10,6 +10,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 import numpy as np
+from .demo_muse import DemoMuseError, interpret_saved_demo
 from .meta_client import MetaMuseClient, NarrativeResult
 from .models import DemoReplayResponse, DemoReplaySummary, ExperimentRecord, ExperimentRequest, GuidedPrompt, Investigation, PredictionRecord, PreparedVideo, SamImageTestRequest, SamImageTestResult, SamMaskOverlay, SamVideoPrepared, SamVideoTestResult, StartInvestigation, ValidationResult
 from .perception import extract_from_sam_tracks, extract_video, prepare_video
@@ -205,6 +206,15 @@ def synthetic_validation_replay() -> dict[str, object]:
             "comparison": state.get("csv_comparison"),
         }
     raise HTTPException(status_code=404, detail="No cached synthetic validation replay is available.")
+
+
+@app.post("/api/demo/synthetic-replay/{session_id}/muse")
+def interpret_cached_demo_with_muse(session_id: str) -> dict[str, object]:
+    """Interpret saved demo evidence without invoking the production handoff."""
+    try:
+        return interpret_saved_demo(session_id, muse)
+    except DemoMuseError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
 
 
 @app.get("/api/demo/replays/{item_id}", response_model=DemoReplayResponse)
