@@ -149,6 +149,15 @@ def list_demo_replays() -> list[DemoReplaySummary]:
     ]
 
 
+@app.get("/api/demo/source-video")
+def demo_source_video() -> FileResponse:
+    """Serve the user-supplied demo video stored locally and excluded from Git."""
+    path = Path("data") / "demo-source-video.mp4"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="The supplied demo video is not installed locally.")
+    return FileResponse(path, media_type="video/mp4", filename="WhatsApp Video 2026-11-02 at 2.24.27 PM.mp4")
+
+
 @app.get("/api/demo/replays/{item_id}", response_model=DemoReplayResponse)
 def replay_saved_investigation(item_id: str) -> DemoReplayResponse:
     """Recompute inference locally from one saved observation without API calls."""
